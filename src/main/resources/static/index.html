@@ -209,6 +209,27 @@
     }
     #status-toast.show { opacity: 1; }
 
+    /* AI INSIGHTS */
+    .insights-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 24px;
+    }
+    .insights-card h3 {
+      font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--ink); margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .insights-badge {
+      font-size: 0.62rem; background: var(--accent); color: #fff;
+      padding: 2px 7px; border-radius: 20px; letter-spacing: 0.04em;
+    }
+    .insights-text {
+      font-size: 0.9rem; color: var(--ink); line-height: 1.7;
+    }
+    .insights-loading {
+      font-size: 0.85rem; color: var(--slate); font-style: italic;
+    }
+
     /* FOOTER */
     .page-footer {
       border-top: 1px solid var(--border); padding: 14px 40px;
@@ -341,6 +362,15 @@
         </div>
         <div class="sector-list" id="sector-list"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- AI INSIGHTS -->
+  <section>
+    <div class="section-label">AI Analysis</div>
+    <div class="insights-card">
+      <h3>Portfolio Insights <span class="insights-badge">Powered by Groq · Llama 3</span></h3>
+      <div id="insights-text" class="insights-loading">Generating analysis...</div>
     </div>
   </section>
 
@@ -555,8 +585,27 @@
       document.getElementById('main-header').style.display = '';
       document.getElementById('dashboard').style.display = '';
       document.getElementById('main-footer').style.display = '';
+
+      // Load AI insights asynchronously after dashboard is visible
+      loadInsights();
     } catch (e) {
       setLoader(0, 'Error: ' + e.message + ' — is the Java server running?');
+    }
+  }
+
+  async function loadInsights() {
+    const el = document.getElementById('insights-text');
+    try {
+      const res  = await fetch('/api/insights');
+      const data = await res.json();
+      if (data.status === 'ok') {
+        el.className = 'insights-text';
+        el.textContent = data.insight;
+      } else {
+        el.textContent = 'Could not generate insights: ' + data.insight;
+      }
+    } catch (e) {
+      el.textContent = 'Insights unavailable: ' + e.message;
     }
   }
 

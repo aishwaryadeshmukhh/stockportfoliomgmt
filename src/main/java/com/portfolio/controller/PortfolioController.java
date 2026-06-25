@@ -1,10 +1,12 @@
 package com.portfolio.controller;
 
 import com.portfolio.analytics.RiskAnalyzer;
+import com.portfolio.api.GroqClient;
 import com.portfolio.model.Stock;
 import com.portfolio.service.PortfolioService;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -14,10 +16,12 @@ public class PortfolioController {
 
     private final PortfolioService portfolioService;
     private final RiskAnalyzer riskAnalyzer;
+    private final GroqClient groqClient;
 
-    public PortfolioController(PortfolioService portfolioService, RiskAnalyzer riskAnalyzer) {
+    public PortfolioController(PortfolioService portfolioService, RiskAnalyzer riskAnalyzer, GroqClient groqClient) {
         this.portfolioService = portfolioService;
         this.riskAnalyzer = riskAnalyzer;
+        this.groqClient = groqClient;
     }
 
     // GET /api/portfolio — all holdings with P&L
@@ -103,5 +107,39 @@ public class PortfolioController {
     public Map<String, String> refresh() {
         portfolioService.refreshPrices();
         return Map.of("status", "ok", "message", "Prices refreshed.");
+    }
+
+    // GET /api/insights — LLM-generated natural language analysis of portfolio
+    @GetMapping("/insights")
+    public Map<String, String> getInsights() {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("You are a financial analyst. Analyze this stock portfolio and give a concise 3-4 sentence interpretation. ");
+        prompt.append("Focus on overall performance, risk-adjusted returns, and one actionable observation. Be direct, no fluff.\n\n");
+
+        prompt.append(String.format("Portfolio: total invested $%.2f, current value $%.2f, return %.2f%%.\n",
+                portfolioService.getTotalInvested(),
+                portfolioService.getTotalCurrentValue(),
+                portfolioService.getTotalProfitLossPercent()));
+
+        prompt.append(String.format("Portfolio Sharpe Ratio: %.2f. Diversification score: %.2f (3 sectors).\n",
+                riskAnalyzer.portfolioSharpeRatio(),
+                riskAnalyzer.calculateDiversificationScore()));
+
+        prompt.append("Individual stocks:\n");
+        for (Stock s : portfolioService.getPortfolio()) {
+            prompt.append(String.format("- %s (%s): buy $%.2f, current $%.2f, P&L %.2f%%, volatility %.1f%%, beta %.2f, sharpe %.2f\n",
+                    s.getSymbol(), s.getSector(),
+                    s.getBuyPrice(), s.getCurrentPrice(), s.getProfitLossPercent(),
+                    riskAnalyzer.calculateVolatility(s.getSymbol()) * 100,
+                    riskAnalyzer.calculateBeta(s.getSymbol()),
+                    riskAnalyzer.calculateSharpeRatio(s.getSymbol())));
+        }
+
+        try {
+            String insight = groqClient.getInsights(prompt.toString());
+            return Map.of("status", "ok", "insight", insight);
+        } catch (IOException e) {
+            return Map.of("status", "error", "insight", "Could not generate insights: " + e.getMessage());
+        }
     }
 }
