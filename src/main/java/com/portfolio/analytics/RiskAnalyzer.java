@@ -4,8 +4,11 @@ import com.portfolio.model.PriceHistory;
 import com.portfolio.model.Stock;
 import com.portfolio.service.PortfolioService;
 
+import org.springframework.stereotype.Service;
+
 import java.util.*;
 
+@Service
 public class RiskAnalyzer {
 
     private static final double RISK_FREE_RATE = 0.05; // 5% annual (approximate US T-bill rate)

@@ -5,10 +5,13 @@ import com.portfolio.api.FallbackDataProvider;
 import com.portfolio.model.PriceHistory;
 import com.portfolio.model.Stock;
 
+import org.springframework.stereotype.Service;
+
 import java.io.IOException;
 import java.time.LocalDate;
 import java.util.*;
 
+@Service
 public class PortfolioService {
 
     private final Map<String, Stock> portfolio = new LinkedHashMap<>();

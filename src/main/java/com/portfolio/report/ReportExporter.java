@@ -5,12 +5,15 @@ import com.portfolio.analytics.RiskAnalyzer;
 import com.portfolio.model.Stock;
 import com.portfolio.service.PortfolioService;
 
+import org.springframework.stereotype.Component;
+
 import java.io.FileWriter;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 
+@Component
 public class ReportExporter {
 
     private final PortfolioService portfolioService;

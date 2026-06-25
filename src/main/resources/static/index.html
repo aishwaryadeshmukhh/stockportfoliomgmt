@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portfolio Tracker — Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink:      #111827;
+      --slate:    #64748B;
+      --border:   #E2E8F0;
+      --card-bg:  #F0F3F8;
+      --white:    #FFFFFF;
+      --accent:   #2563EB;
+      --gain:     #059669;
+      --loss:     #DC2626;
+      --gain-bg:  #ECFDF5;
+      --loss-bg:  #FEF2F2;
+      --warn:     #D97706;
+      --mono: 'IBM Plex Mono', 'Courier New', monospace;
+      --sans: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    }
+
+    html { font-size: 15px; }
+    body { font-family: var(--sans); background: var(--white); color: var(--ink); line-height: 1.5; }
+
+    /* LOADING SCREEN */
+    #loading-screen {
+      position: fixed; inset: 0;
+      background: var(--white);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 20px; z-index: 999;
+    }
+    .loader-title { font-size: 1.1rem; font-weight: 700; color: var(--ink); }
+    .loader-sub   { font-size: 0.8rem; color: var(--slate); }
+    .loader-bar-track {
+      width: 260px; height: 4px;
+      background: var(--border); border-radius: 2px; overflow: hidden;
+    }
+    .loader-bar-fill {
+      height: 100%; width: 0%;
+      background: var(--accent); border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+    .loader-step {
+      font-family: var(--mono); font-size: 0.72rem;
+      color: var(--slate); min-height: 1.2em;
+    }
+
+    /* HEADER */
+    .site-header {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--white);
+      border-top: 3px solid var(--accent);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 40px;
+      display: flex; align-items: center;
+      justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    }
+    .header-left h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; }
+    .header-left .subtitle {
+      font-size: 0.7rem; color: var(--slate);
+      letter-spacing: 0.06em; text-transform: uppercase; margin-top: 1px;
+    }
+    .header-summary { display: flex; gap: 36px; flex-wrap: wrap; }
+    .header-stat { text-align: right; }
+    .header-stat .hs-label {
+      font-size: 0.68rem; letter-spacing: 0.07em;
+      text-transform: uppercase; color: var(--slate);
+    }
+    .header-stat .hs-value {
+      font-family: var(--mono); font-size: 1rem; font-weight: 600;
+      font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+    }
+    .gain { color: var(--gain); }
+    .loss { color: var(--loss); }
+    .warn-color { color: var(--warn); }
+
+    /* REFRESH BUTTON */
+    .refresh-btn {
+      font-size: 0.78rem; font-weight: 600;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 5px;
+      padding: 7px 16px; cursor: pointer;
+      letter-spacing: 0.02em; transition: opacity 0.15s;
+    }
+    .refresh-btn:hover { opacity: 0.85; }
+    .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* PAGE BODY */
+    .page-body {
+      max-width: 1280px; margin: 0 auto;
+      padding: 40px; display: flex;
+      flex-direction: column; gap: 40px;
+    }
+    .section-label {
+      font-size: 0.68rem; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--slate); margin-bottom: 14px;
+    }
+
+    /* KPI CARDS */
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+    }
+    .kpi-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      padding: 22px; border-radius: 6px;
+    }
+    .kpi-card .kpi-label {
+      font-size: 0.72rem; letter-spacing: 0.07em;
+      text-transform: uppercase; color: var(--slate); margin-bottom: 8px;
+    }
+    .kpi-card .kpi-value {
+      font-family: var(--mono); font-size: 1.55rem; font-weight: 600;
+      font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1;
+    }
+    .kpi-card .kpi-sub {
+      font-size: 0.75rem; color: var(--slate);
+      margin-top: 4px; font-family: var(--mono);
+    }
+
+    /* SPLIT LAYOUT */
+    .split {
+      display: grid; grid-template-columns: 1fr 380px;
+      gap: 20px; align-items: start;
+    }
+
+    /* TABLE */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    thead th {
+      font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--slate); font-weight: 600; text-align: left;
+      padding: 8px 14px; border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    thead th.num { text-align: right; }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--card-bg); }
+    tbody td { padding: 14px; vertical-align: middle; white-space: nowrap; }
+    tbody td.num {
+      text-align: right; font-family: var(--mono);
+      font-variant-numeric: tabular-nums; font-size: 0.85rem;
+    }
+    .ticker { font-family: var(--mono); font-weight: 700; font-size: 0.9rem; }
+    .sector-chip {
+      display: inline-block; font-size: 0.65rem; letter-spacing: 0.05em;
+      text-transform: uppercase; background: var(--border); color: var(--slate);
+      padding: 2px 7px; border-radius: 20px; margin-top: 2px;
+    }
+    .pl-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-family: var(--mono); font-size: 0.8rem;
+      font-variant-numeric: tabular-nums;
+      padding: 3px 8px; border-radius: 4px; font-weight: 600;
+    }
+    .pl-pill.gain { background: var(--gain-bg); color: var(--gain); }
+    .pl-pill.loss { background: var(--loss-bg); color: var(--loss); }
+
+    /* RISK PANEL */
+    .risk-panel { display: flex; flex-direction: column; gap: 14px; }
+    .risk-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 22px;
+    }
+    .risk-card h3 {
+      font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--ink); margin-bottom: 14px;
+    }
+    .risk-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 8px 0; border-bottom: 1px solid var(--border); gap: 12px;
+    }
+    .risk-row:last-child { border-bottom: none; }
+    .risk-row .rr-label { font-size: 0.8rem; color: var(--slate); flex: 1; }
+    .risk-row .rr-val {
+      font-family: var(--mono); font-size: 0.88rem; font-weight: 600;
+      font-variant-numeric: tabular-nums; text-align: right;
+    }
+
+    /* DIVERSIFICATION BAR */
+    .div-bar-track {
+      height: 6px; background: var(--border);
+      border-radius: 3px; margin-top: 8px; overflow: hidden;
+    }
+    .div-bar-fill { height: 100%; background: var(--gain); border-radius: 3px; }
+    .div-bar-label {
+      display: flex; justify-content: space-between;
+      font-size: 0.7rem; color: var(--slate);
+      font-family: var(--mono); margin-top: 4px;
+    }
+    .sector-list { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+    .sector-item { display: flex; flex-direction: column; gap: 4px; }
+    .sector-item-header { display: flex; justify-content: space-between; font-size: 0.78rem; }
+    .sector-item-header span:last-child { font-family: var(--mono); font-size: 0.75rem; color: var(--slate); }
+    .sector-bar-track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .sector-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); opacity: 0.65; }
+
+    /* STATUS TOAST */
+    #status-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--ink); color: #fff; font-size: 0.8rem;
+      padding: 10px 20px; border-radius: 6px;
+      opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 200;
+    }
+    #status-toast.show { opacity: 1; }
+
+    /* FOOTER */
+    .page-footer {
+      border-top: 1px solid var(--border); padding: 14px 40px;
+      font-size: 0.72rem; color: var(--slate);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 1024px) {
+      .split { grid-template-columns: 1fr; }
+      .risk-panel { flex-direction: row; flex-wrap: wrap; }
+      .risk-card { flex: 1 1 260px; }
+    }
+    @media (max-width: 700px) {
+      .page-body { padding: 20px 16px; }
+      .site-header { padding: 14px 16px; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .header-summary { gap: 20px; }
+      .risk-panel { flex-direction: column; }
+    }
+    @media (max-width: 420px) { .kpi-grid { grid-template-columns: 1fr; } }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+</head>
+<body>
+
+<!-- LOADING SCREEN -->
+<div id="loading-screen">
+  <div class="loader-title">Stock Portfolio Tracker</div>
+  <div class="loader-bar-track"><div class="loader-bar-fill" id="loader-bar"></div></div>
+  <div class="loader-step" id="loader-step">Connecting to server...</div>
+  <div class="loader-sub">Fetching portfolio &amp; computing risk metrics</div>
+</div>
+
+<!-- HEADER -->
+<header class="site-header" id="main-header" style="display:none">
+  <div class="header-left">
+    <h1>Stock Portfolio Tracker</h1>
+    <div class="subtitle">Risk &amp; Performance Dashboard</div>
+  </div>
+  <div class="header-summary">
+    <div class="header-stat">
+      <div class="hs-label">Total Invested</div>
+      <div class="hs-value" id="h-invested">—</div>
+    </div>
+    <div class="header-stat">
+      <div class="hs-label">Current Value</div>
+      <div class="hs-value" id="h-value">—</div>
+    </div>
+    <div class="header-stat">
+      <div class="hs-label">Total P&amp;L</div>
+      <div class="hs-value" id="h-pl">—</div>
+    </div>
+    <div class="header-stat">
+      <div class="hs-label">Return</div>
+      <div class="hs-value" id="h-ret">—</div>
+    </div>
+    <button class="refresh-btn" id="refresh-btn" onclick="refreshPrices()">Refresh Prices</button>
+  </div>
+</header>
+
+<!-- DASHBOARD -->
+<main class="page-body" id="dashboard" style="display:none">
+
+  <!-- KPI CARDS -->
+  <section>
+    <div class="section-label">Portfolio Overview</div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Portfolio Value</div>
+        <div class="kpi-value" id="kpi-value">—</div>
+        <div class="kpi-sub" id="kpi-pl">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Weighted Sharpe Ratio</div>
+        <div class="kpi-value" id="kpi-sharpe">—</div>
+        <div class="kpi-sub" id="kpi-sharpe-label">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Diversification Score</div>
+        <div class="kpi-value" id="kpi-div">—</div>
+        <div class="kpi-sub" id="kpi-div-label">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Holdings</div>
+        <div class="kpi-value" id="kpi-count">—</div>
+        <div class="kpi-sub" id="kpi-symbols">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOLDINGS + RISK -->
+  <section class="split">
+    <div>
+      <div class="section-label">Holdings</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Stock</th>
+              <th class="num">Buy Price</th>
+              <th class="num">Current</th>
+              <th class="num">Qty</th>
+              <th class="num">Value</th>
+              <th class="num">P&amp;L</th>
+              <th class="num">Volatility</th>
+              <th class="num">Beta</th>
+              <th class="num">Sharpe</th>
+              <th>30d Trend</th>
+            </tr>
+          </thead>
+          <tbody id="holdings-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="risk-panel">
+      <div class="risk-card">
+        <h3>Risk Metrics</h3>
+        <div id="risk-rows"></div>
+      </div>
+      <div class="risk-card">
+        <h3>Diversification</h3>
+        <div class="div-bar-track">
+          <div class="div-bar-fill" id="div-bar" style="width:0%"></div>
+        </div>
+        <div class="div-bar-label">
+          <span id="div-score-label">—</span>
+          <span id="div-rating">—</span>
+        </div>
+        <div class="sector-list" id="sector-list"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="page-footer" id="main-footer" style="display:none">
+  <span>Stock Portfolio Tracker &amp; Risk Analyzer</span>
+  <span id="footer-time">—</span>
+</footer>
+
+<div id="status-toast"></div>
+
+<script>
+  const fmt = (n, d=2) => Number(n).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
+  const fmtMoney = n => '$' + fmt(n);
+
+  function showToast(msg) {
+    const t = document.getElementById('status-toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  function setLoader(pct, msg) {
+    document.getElementById('loader-bar').style.width = pct + '%';
+    document.getElementById('loader-step').textContent = msg;
+  }
+
+  function drawSparkline(canvas, buy, current) {
+    const W = canvas.width, H = canvas.height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    const n = 30;
+    const prices = Array.from({length: n}, (_, i) => {
+      const t = i / (n - 1);
+      return buy + (current - buy) * t + Math.sin(i * 1.7) * 0.03 * buy;
+    });
+    const min = Math.min(...prices), max = Math.max(...prices), range = max - min || 1;
+    const isGain = current >= buy;
+    const color = isGain ? '#059669' : '#DC2626';
+    const pts = prices.map((p, i) => ({
+      x: (i / (n - 1)) * W,
+      y: H - ((p - min) / range) * (H - 4) - 2
+    }));
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, H);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(pts[n-1].x, H);
+    ctx.closePath();
+    ctx.fillStyle = isGain ? 'rgba(5,150,105,0.10)' : 'rgba(220,38,38,0.10)';
+    ctx.fill();
+    ctx.beginPath();
+    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    const last = pts[n-1];
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, 2.5, 0, Math.PI*2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  function renderDashboard(summary, portfolio, risk) {
+    // Header
+    document.getElementById('h-invested').textContent = fmtMoney(summary.totalInvested);
+    document.getElementById('h-value').textContent    = fmtMoney(summary.totalCurrentValue);
+    const plEl  = document.getElementById('h-pl');
+    const retEl = document.getElementById('h-ret');
+    const plSign = summary.totalProfitLoss >= 0 ? '+' : '';
+    plEl.textContent  = plSign + fmtMoney(summary.totalProfitLoss);
+    plEl.className    = 'hs-value ' + (summary.totalProfitLoss >= 0 ? 'gain' : 'loss');
+    retEl.textContent = plSign + fmt(summary.totalProfitLossPct) + '%';
+    retEl.className   = 'hs-value ' + (summary.totalProfitLossPct >= 0 ? 'gain' : 'loss');
+
+    // KPI cards
+    document.getElementById('kpi-value').textContent = fmtMoney(summary.totalCurrentValue);
+    const plSub = document.getElementById('kpi-pl');
+    plSub.textContent = plSign + fmtMoney(summary.totalProfitLoss) + ' total gain';
+    plSub.className   = 'kpi-sub ' + (summary.totalProfitLoss >= 0 ? 'gain' : 'loss');
+
+    const sharpe = risk.portfolioSharpeRatio;
+    const sharpeEl = document.getElementById('kpi-sharpe');
+    sharpeEl.textContent = fmt(sharpe);
+    sharpeEl.className = 'kpi-value ' + (sharpe >= 1 ? 'gain' : sharpe >= 0 ? 'warn-color' : 'loss');
+    document.getElementById('kpi-sharpe-label').textContent =
+      sharpe >= 2 ? 'Excellent risk-adjusted return' : sharpe >= 1 ? 'Good risk-adjusted return' : 'Below average';
+
+    const divScore = risk.diversificationScore;
+    const divEl = document.getElementById('kpi-div');
+    divEl.textContent = fmt(divScore);
+    divEl.className = 'kpi-value ' + (divScore >= 0.8 ? 'gain' : divScore >= 0.5 ? 'warn-color' : 'loss');
+    document.getElementById('kpi-div-label').textContent =
+      portfolio.length + ' holdings · ' +
+      [...new Set(portfolio.map(s => s.sector))].length + ' sectors';
+
+    document.getElementById('kpi-count').textContent = summary.holdingsCount;
+    document.getElementById('kpi-symbols').textContent = portfolio.map(s => s.symbol).join(' · ');
+
+    // Holdings table
+    const riskBySymbol = {};
+    risk.stocks.forEach(s => riskBySymbol[s.symbol] = s);
+
+    const tbody = document.getElementById('holdings-tbody');
+    tbody.innerHTML = '';
+    portfolio.forEach(s => {
+      const r = riskBySymbol[s.symbol] || {};
+      const isGain = s.profitLoss >= 0;
+      const sign = isGain ? '+' : '';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <div class="ticker">${s.symbol}</div>
+          <div class="sector-chip">${s.sector}</div>
+        </td>
+        <td class="num">${fmtMoney(s.buyPrice)}</td>
+        <td class="num">${fmtMoney(s.currentPrice)}</td>
+        <td class="num">${s.quantity}</td>
+        <td class="num">${fmtMoney(s.currentValue)}</td>
+        <td class="num">
+          <span class="pl-pill ${isGain ? 'gain' : 'loss'}">
+            ${sign}${fmtMoney(s.profitLoss)}
+            <span style="opacity:0.75">${sign}${fmt(s.profitLossPct)}%</span>
+          </span>
+        </td>
+        <td class="num" style="color:${(r.volatility||0) > 35 ? 'var(--warn)' : 'var(--slate)'}">
+          ${fmt(r.volatility||0)}%
+        </td>
+        <td class="num" style="color:${(r.beta||1) > 1.4 ? 'var(--loss)' : (r.beta||1) < 0.9 ? 'var(--gain)' : 'var(--ink)'}">
+          ${fmt(r.beta||0)}
+        </td>
+        <td class="num" style="color:${(r.sharpe||0) >= 1 ? 'var(--gain)' : 'var(--warn)'}">
+          ${fmt(r.sharpe||0)}
+        </td>
+        <td><canvas id="spark-${s.symbol}" width="80" height="32"></canvas></td>`;
+      tbody.appendChild(tr);
+      drawSparkline(document.getElementById('spark-' + s.symbol), s.buyPrice, s.currentPrice);
+    });
+
+    // Risk rows
+    const riskRows = document.getElementById('risk-rows');
+    riskRows.innerHTML = '';
+    const betas = risk.stocks.map(s => ({symbol: s.symbol, beta: s.beta}));
+    const highBeta = betas.reduce((a, b) => a.beta > b.beta ? a : b, {symbol:'—', beta:0});
+    const lowBeta  = betas.reduce((a, b) => a.beta < b.beta ? a : b, {symbol:'—', beta:99});
+    const avgVol   = risk.stocks.reduce((s, r) => s + r.volatility, 0) / (risk.stocks.length || 1);
+
+    [
+      ['Portfolio Sharpe',    fmt(risk.portfolioSharpeRatio), sharpe >= 1 ? 'gain' : 'warn-color'],
+      ['Risk-Free Rate',      '5.00%',  ''],
+      ['Avg Volatility',      fmt(avgVol) + '%', avgVol > 35 ? 'warn-color' : ''],
+      ['Market Proxy',        'SPY',    ''],
+      ['Highest Beta',        highBeta.symbol + ' ' + fmt(highBeta.beta), 'loss'],
+      ['Lowest Beta',         lowBeta.symbol  + ' ' + fmt(lowBeta.beta),  'gain'],
+    ].forEach(([label, val, cls]) => {
+      const row = document.createElement('div');
+      row.className = 'risk-row';
+      row.innerHTML = `<span class="rr-label">${label}</span><span class="rr-val ${cls}">${val}</span>`;
+      riskRows.appendChild(row);
+    });
+
+    // Diversification bar
+    document.getElementById('div-bar').style.width = (divScore * 100) + '%';
+    document.getElementById('div-score-label').textContent = fmt(divScore) + ' / 1.00';
+    document.getElementById('div-rating').textContent =
+      divScore >= 0.8 ? 'Well Diversified' : divScore >= 0.5 ? 'Moderate' : 'Concentrated';
+
+    // Sector breakdown
+    const totalVal = portfolio.reduce((s, h) => s + h.currentValue, 0);
+    const sectorMap = {};
+    portfolio.forEach(h => sectorMap[h.sector] = (sectorMap[h.sector] || 0) + h.currentValue);
+    const sectorList = document.getElementById('sector-list');
+    sectorList.innerHTML = '';
+    Object.entries(sectorMap).sort((a,b) => b[1]-a[1]).forEach(([name, val]) => {
+      const pct = (val / totalVal * 100).toFixed(1);
+      const el = document.createElement('div');
+      el.className = 'sector-item';
+      el.innerHTML = `
+        <div class="sector-item-header"><span>${name}</span><span>${pct}%</span></div>
+        <div class="sector-bar-track">
+          <div class="sector-bar-fill" style="width:${pct}%"></div>
+        </div>`;
+      sectorList.appendChild(el);
+    });
+
+    // Footer
+    document.getElementById('footer-time').textContent =
+      'Last updated: ' + new Date().toLocaleTimeString();
+  }
+
+  async function loadData() {
+    try {
+      setLoader(10, 'Loading portfolio...');
+      const [summaryRes, portfolioRes] = await Promise.all([
+        fetch('/api/summary'),
+        fetch('/api/portfolio')
+      ]);
+      const summary   = await summaryRes.json();
+      const portfolio = await portfolioRes.json();
+
+      setLoader(55, 'Computing risk metrics (this may take a moment)...');
+      const riskRes = await fetch('/api/risk');
+      const risk    = await riskRes.json();
+
+      setLoader(100, 'Done!');
+      await new Promise(r => setTimeout(r, 400));
+
+      renderDashboard(summary, portfolio, risk);
+
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('main-header').style.display = '';
+      document.getElementById('dashboard').style.display = '';
+      document.getElementById('main-footer').style.display = '';
+    } catch (e) {
+      setLoader(0, 'Error: ' + e.message + ' — is the Java server running?');
+    }
+  }
+
+  async function refreshPrices() {
+    const btn = document.getElementById('refresh-btn');
+    btn.disabled = true;
+    btn.textContent = 'Refreshing...';
+    showToast('Refreshing prices from Alpha Vantage...');
+    try {
+      await fetch('/api/refresh', { method: 'POST' });
+      showToast('Prices updated. Reloading dashboard...');
+      await loadData();
+    } catch (e) {
+      showToast('Refresh failed: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Refresh Prices';
+    }
+  }
+
+  loadData();
+</script>
+</body>
+</html>
