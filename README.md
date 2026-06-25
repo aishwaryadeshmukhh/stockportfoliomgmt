@@ -1,5 +1,7 @@
 # Stock Portfolio Tracker & Risk Analyzer
 
+![Architecture](arc_diagram.png)
+
 A full-stack financial analytics application built with **Java** and **Spring Boot**. Tracks a stock portfolio with live market data, computes industry-standard risk metrics, and generates AI-powered natural language insights via Groq (Llama 3).
 
 ---
