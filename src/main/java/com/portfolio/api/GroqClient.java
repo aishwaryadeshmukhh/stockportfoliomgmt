@@ -21,7 +21,7 @@ public class GroqClient {
     private static final String GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
     private static final String MODEL = "llama-3.3-70b-versatile";
 
-    @Value("${groq.apikey}")
+    @Value("${groq.apikey:}")
     private String apiKey;
 
     public String getInsights(String prompt) throws IOException {
