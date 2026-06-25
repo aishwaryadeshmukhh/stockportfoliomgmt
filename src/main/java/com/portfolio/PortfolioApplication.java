@@ -21,8 +21,9 @@ public class PortfolioApplication {
             PortfolioService portfolioService,
             @Value("${alphavantage.apikey:}") String apiKey) {
         return args -> {
-            if (!apiKey.isBlank()) {
-                portfolioService.enableApi(apiKey);
+            String cleanApiKey = apiKey.replace("\"", "").trim();
+            if (!cleanApiKey.isBlank()) {
+                portfolioService.enableApi(cleanApiKey);
                 System.out.println("Alpha Vantage API key loaded. Prices will be fetched live.");
             } else {
                 System.out.println("No API key set — using demo prices.");

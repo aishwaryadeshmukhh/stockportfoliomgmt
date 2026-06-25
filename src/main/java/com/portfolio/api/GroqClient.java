@@ -40,7 +40,7 @@ public class GroqClient {
 
         HttpURLConnection conn = (HttpURLConnection) new URL(GROQ_URL).openConnection();
         conn.setRequestMethod("POST");
-        conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        conn.setRequestProperty("Authorization", "Bearer " + apiKey.replace("\"", "").trim());
         conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
         conn.setDoOutput(true);
         conn.setConnectTimeout(15_000);
