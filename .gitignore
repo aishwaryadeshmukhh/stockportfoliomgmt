@@ -1,0 +1,7 @@
+target/
+*.class
+*.jar
+*.csv
+.idea/
+*.iml
+.vscode/
