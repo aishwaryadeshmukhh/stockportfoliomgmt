@@ -1,14 +1,24 @@
 package com.portfolio.model;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
 import java.time.LocalDate;
 
+@Entity
+@Table(name = "stocks")
 public class Stock {
+
+    @Id
     private String symbol;
     private String sector;
     private double buyPrice;
     private int quantity;
     private LocalDate buyDate;
     private double currentPrice;
+
+    public Stock() {}
 
     public Stock(String symbol, String sector, double buyPrice, int quantity, LocalDate buyDate) {
         this.symbol = symbol;
@@ -35,7 +45,6 @@ public class Stock {
         return buyPrice * quantity;
     }
 
-    // Getters and setters
     public String getSymbol() { return symbol; }
     public String getSector() { return sector; }
     public double getBuyPrice() { return buyPrice; }

@@ -4,7 +4,9 @@ import com.portfolio.api.AlphaVantageClient;
 import com.portfolio.api.FallbackDataProvider;
 import com.portfolio.model.PriceHistory;
 import com.portfolio.model.Stock;
+import com.portfolio.repository.StockRepository;
 
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -14,10 +16,14 @@ import java.util.*;
 @Service
 public class PortfolioService {
 
-    private final Map<String, Stock> portfolio = new LinkedHashMap<>();
+    private final StockRepository stockRepository;
     private final Map<String, List<PriceHistory>> historyCache = new HashMap<>();
     private AlphaVantageClient apiClient;
     private boolean useApi = false;
+
+    public PortfolioService(StockRepository stockRepository) {
+        this.stockRepository = stockRepository;
+    }
 
     public void enableApi(String apiKey) {
         this.apiClient = new AlphaVantageClient(apiKey);
@@ -25,31 +31,38 @@ public class PortfolioService {
     }
 
     public void addStock(String symbol, String sector, double buyPrice, int quantity, LocalDate buyDate) {
-        if (portfolio.containsKey(symbol.toUpperCase())) {
+        symbol = symbol.toUpperCase();
+        if (stockRepository.existsById(symbol)) {
             System.out.println("Stock " + symbol + " already exists. Remove it first to re-add.");
             return;
         }
-        portfolio.put(symbol.toUpperCase(), new Stock(symbol.toUpperCase(), sector, buyPrice, quantity, buyDate));
-        System.out.println("Added " + symbol.toUpperCase() + " to portfolio.");
+        stockRepository.save(new Stock(symbol, sector, buyPrice, quantity, buyDate));
+        System.out.println("Added " + symbol + " to portfolio.");
     }
 
     public boolean removeStock(String symbol) {
-        return portfolio.remove(symbol.toUpperCase()) != null;
+        symbol = symbol.toUpperCase();
+        if (!stockRepository.existsById(symbol)) return false;
+        stockRepository.deleteById(symbol);
+        historyCache.remove(symbol);
+        return true;
     }
 
+    @Scheduled(fixedRateString = "${price.refresh.interval:86400000}")
     public void refreshPrices() {
+        List<Stock> stocks = stockRepository.findAll();
+        if (stocks.isEmpty()) return;
+
         if (useApi) {
             System.out.println("Fetching live prices from Alpha Vantage (13s delay between each)...");
         } else {
             System.out.println("Loading demo prices...");
         }
 
-        List<Stock> stocks = new ArrayList<>(portfolio.values());
         for (int i = 0; i < stocks.size(); i++) {
             Stock stock = stocks.get(i);
             try {
                 if (useApi) {
-                    // Delay before every request except the first
                     if (i > 0) {
                         System.out.println("  Waiting 13s before next request...");
                         Thread.sleep(apiClient.getDelayMs());
@@ -60,9 +73,11 @@ public class PortfolioService {
                 } else {
                     stock.setCurrentPrice(FallbackDataProvider.getCurrentPrice(stock.getSymbol()));
                 }
+                stockRepository.save(stock);
             } catch (IOException e) {
                 System.out.println("  " + stock.getSymbol() + ": fetch failed (" + e.getMessage() + "), using demo price.");
                 stock.setCurrentPrice(FallbackDataProvider.getCurrentPrice(stock.getSymbol()));
+                stockRepository.save(stock);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -72,15 +87,12 @@ public class PortfolioService {
 
     public List<PriceHistory> getHistory(String symbol, int days) {
         symbol = symbol.toUpperCase();
-        if (historyCache.containsKey(symbol)) {
-            return historyCache.get(symbol);
-        }
+        if (historyCache.containsKey(symbol)) return historyCache.get(symbol);
+
         List<PriceHistory> history;
         if (useApi) {
             try {
-                if (!historyCache.isEmpty()) {
-                    Thread.sleep(apiClient.getDelayMs());
-                }
+                if (!historyCache.isEmpty()) Thread.sleep(apiClient.getDelayMs());
                 history = apiClient.fetchDailyHistory(symbol, days);
             } catch (IOException e) {
                 history = FallbackDataProvider.getHistory(symbol, days);
@@ -95,24 +107,24 @@ public class PortfolioService {
         return history;
     }
 
-    public Collection<Stock> getPortfolio() {
-        return portfolio.values();
+    public List<Stock> getPortfolio() {
+        return stockRepository.findAll();
     }
 
     public Stock getStock(String symbol) {
-        return portfolio.get(symbol.toUpperCase());
+        return stockRepository.findById(symbol.toUpperCase()).orElse(null);
     }
 
     public boolean isEmpty() {
-        return portfolio.isEmpty();
+        return stockRepository.count() == 0;
     }
 
     public double getTotalInvested() {
-        return portfolio.values().stream().mapToDouble(Stock::getInvestedValue).sum();
+        return stockRepository.findAll().stream().mapToDouble(Stock::getInvestedValue).sum();
     }
 
     public double getTotalCurrentValue() {
-        return portfolio.values().stream().mapToDouble(Stock::getCurrentValue).sum();
+        return stockRepository.findAll().stream().mapToDouble(Stock::getCurrentValue).sum();
     }
 
     public double getTotalProfitLoss() {
@@ -129,11 +141,9 @@ public class PortfolioService {
         PriorityQueue<Stock> pq = new PriorityQueue<>(
                 (a, b) -> Double.compare(b.getProfitLossPercent(), a.getProfitLossPercent())
         );
-        pq.addAll(portfolio.values());
+        pq.addAll(stockRepository.findAll());
         List<Stock> result = new ArrayList<>();
-        for (int i = 0; i < n && !pq.isEmpty(); i++) {
-            result.add(pq.poll());
-        }
+        for (int i = 0; i < n && !pq.isEmpty(); i++) result.add(pq.poll());
         return result;
     }
 }

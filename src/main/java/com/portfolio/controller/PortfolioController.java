@@ -2,8 +2,11 @@ package com.portfolio.controller;
 
 import com.portfolio.analytics.RiskAnalyzer;
 import com.portfolio.api.GroqClient;
+import com.portfolio.dto.StockDTO;
+import com.portfolio.dto.StockRequest;
 import com.portfolio.model.Stock;
 import com.portfolio.service.PortfolioService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -24,44 +27,35 @@ public class PortfolioController {
         this.groqClient = groqClient;
     }
 
-    // GET /api/portfolio — all holdings with P&L
     @GetMapping("/portfolio")
-    public List<Map<String, Object>> getPortfolio() {
-        List<Map<String, Object>> result = new ArrayList<>();
+    public ResponseEntity<List<StockDTO>> getPortfolio() {
+        List<StockDTO> result = new ArrayList<>();
         for (Stock s : portfolioService.getPortfolio()) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("symbol",          s.getSymbol());
-            row.put("sector",          s.getSector());
-            row.put("buyPrice",        s.getBuyPrice());
-            row.put("currentPrice",    s.getCurrentPrice());
-            row.put("quantity",        s.getQuantity());
-            row.put("investedValue",   s.getInvestedValue());
-            row.put("currentValue",    s.getCurrentValue());
-            row.put("profitLoss",      s.getProfitLoss());
-            row.put("profitLossPct",   s.getProfitLossPercent());
-            result.add(row);
+            result.add(new StockDTO(
+                    s.getSymbol(), s.getSector(), s.getBuyPrice(), s.getCurrentPrice(),
+                    s.getQuantity(), s.getInvestedValue(), s.getCurrentValue(),
+                    s.getProfitLoss(), s.getProfitLossPercent()
+            ));
         }
-        return result;
+        return ResponseEntity.ok(result);
     }
 
-    // GET /api/summary — portfolio-level totals
     @GetMapping("/summary")
-    public Map<String, Object> getSummary() {
+    public ResponseEntity<Map<String, Object>> getSummary() {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("totalInvested",      portfolioService.getTotalInvested());
         summary.put("totalCurrentValue",  portfolioService.getTotalCurrentValue());
         summary.put("totalProfitLoss",    portfolioService.getTotalProfitLoss());
         summary.put("totalProfitLossPct", portfolioService.getTotalProfitLossPercent());
         summary.put("holdingsCount",      portfolioService.getPortfolio().size());
-        return summary;
+        return ResponseEntity.ok(summary);
     }
 
-    // GET /api/risk — risk metrics for all stocks + portfolio level
     @GetMapping("/risk")
-    public Map<String, Object> getRisk() {
+    public ResponseEntity<Map<String, Object>> getRisk() {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("portfolioSharpeRatio",   riskAnalyzer.portfolioSharpeRatio());
-        result.put("diversificationScore",   riskAnalyzer.calculateDiversificationScore());
+        result.put("portfolioSharpeRatio", riskAnalyzer.portfolioSharpeRatio());
+        result.put("diversificationScore", riskAnalyzer.calculateDiversificationScore());
 
         List<Map<String, Object>> stocks = new ArrayList<>();
         for (Stock s : portfolioService.getPortfolio()) {
@@ -74,57 +68,49 @@ public class PortfolioController {
             stocks.add(row);
         }
         result.put("stocks", stocks);
-        return result;
+        return ResponseEntity.ok(result);
     }
 
-    // POST /api/portfolio/add — add a stock
     @PostMapping("/portfolio/add")
-    public Map<String, String> addStock(@RequestBody Map<String, String> body) {
-        try {
-            portfolioService.addStock(
-                body.get("symbol"),
-                body.get("sector"),
-                Double.parseDouble(body.get("buyPrice")),
-                Integer.parseInt(body.get("quantity")),
-                LocalDate.parse(body.get("buyDate"))
-            );
-            return Map.of("status", "ok", "message", body.get("symbol") + " added.");
-        } catch (Exception e) {
-            return Map.of("status", "error", "message", e.getMessage());
+    public ResponseEntity<Map<String, String>> addStock(@RequestBody StockRequest request) {
+        if (request.getSymbol() == null || request.getSector() == null) {
+            throw new IllegalArgumentException("Symbol and sector are required.");
         }
+        portfolioService.addStock(
+                request.getSymbol(),
+                request.getSector(),
+                request.getBuyPrice(),
+                request.getQuantity(),
+                LocalDate.parse(request.getBuyDate())
+        );
+        return ResponseEntity.ok(Map.of("status", "ok", "message", request.getSymbol().toUpperCase() + " added."));
     }
 
-    // DELETE /api/portfolio/{symbol} — remove a stock
     @DeleteMapping("/portfolio/{symbol}")
-    public Map<String, String> removeStock(@PathVariable String symbol) {
+    public ResponseEntity<Map<String, String>> removeStock(@PathVariable String symbol) {
         boolean removed = portfolioService.removeStock(symbol);
-        return Map.of("status", removed ? "ok" : "error",
-                      "message", removed ? symbol + " removed." : symbol + " not found.");
+        if (!removed) throw new IllegalArgumentException(symbol + " not found in portfolio.");
+        return ResponseEntity.ok(Map.of("status", "ok", "message", symbol + " removed."));
     }
 
-    // POST /api/refresh — refresh all prices
     @PostMapping("/refresh")
-    public Map<String, String> refresh() {
+    public ResponseEntity<Map<String, String>> refresh() {
         portfolioService.refreshPrices();
-        return Map.of("status", "ok", "message", "Prices refreshed.");
+        return ResponseEntity.ok(Map.of("status", "ok", "message", "Prices refreshed."));
     }
 
-    // GET /api/insights — LLM-generated natural language analysis of portfolio
     @GetMapping("/insights")
-    public Map<String, String> getInsights() {
+    public ResponseEntity<Map<String, String>> getInsights() throws IOException {
         StringBuilder prompt = new StringBuilder();
         prompt.append("You are a financial analyst. Analyze this stock portfolio and give a concise 3-4 sentence interpretation. ");
         prompt.append("Focus on overall performance, risk-adjusted returns, and one actionable observation. Be direct, no fluff.\n\n");
-
         prompt.append(String.format("Portfolio: total invested $%.2f, current value $%.2f, return %.2f%%.\n",
                 portfolioService.getTotalInvested(),
                 portfolioService.getTotalCurrentValue(),
                 portfolioService.getTotalProfitLossPercent()));
-
-        prompt.append(String.format("Portfolio Sharpe Ratio: %.2f. Diversification score: %.2f (3 sectors).\n",
+        prompt.append(String.format("Portfolio Sharpe Ratio: %.2f. Diversification score: %.2f.\n",
                 riskAnalyzer.portfolioSharpeRatio(),
                 riskAnalyzer.calculateDiversificationScore()));
-
         prompt.append("Individual stocks:\n");
         for (Stock s : portfolioService.getPortfolio()) {
             prompt.append(String.format("- %s (%s): buy $%.2f, current $%.2f, P&L %.2f%%, volatility %.1f%%, beta %.2f, sharpe %.2f\n",
@@ -134,12 +120,7 @@ public class PortfolioController {
                     riskAnalyzer.calculateBeta(s.getSymbol()),
                     riskAnalyzer.calculateSharpeRatio(s.getSymbol())));
         }
-
-        try {
-            String insight = groqClient.getInsights(prompt.toString());
-            return Map.of("status", "ok", "insight", insight);
-        } catch (IOException e) {
-            return Map.of("status", "error", "insight", "Could not generate insights: " + e.getMessage());
-        }
+        String insight = groqClient.getInsights(prompt.toString());
+        return ResponseEntity.ok(Map.of("status", "ok", "insight", insight));
     }
 }
