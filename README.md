@@ -1,8 +1,8 @@
-# Stock Portfolio Tracker & Risk Analyzer
+# Stock Portfolio Risk Analyzer
 
 ![Architecture](arc_diagram.png)
 
-A full-stack financial analytics application built with **Java** and **Spring Boot**. Tracks a stock portfolio with live market data, computes industry-standard risk metrics, and generates AI-powered natural language insights via Groq (Llama 3).
+A full-stack financial analytics application built with Java 17 and Spring Boot, featuring a REST API backend and a live single-page dashboard that tracks a multi-stock portfolio with real-time price data from Alpha Vantage. Computes institutional risk metrics including Sharpe Ratio, true Beta (via SPY covariance), and annualized Volatility, with portfolio data persisted using Spring Data JPA. Integrates Groq (Llama 3.3 70B) to generate natural language risk summaries from live market data, deployed on Railway with environment-based secret management.
 
 ---
 
@@ -11,9 +11,11 @@ A full-stack financial analytics application built with **Java** and **Spring Bo
 - **Live prices** fetched from Alpha Vantage API with rate-limit-aware sequential scheduling
 - **Risk metrics** — Sharpe Ratio, annualized Volatility, true Beta (SPY covariance), 30-day Moving Average, Diversification Score
 - **Interactive dashboard** — single-page frontend with holdings table, sparklines, sector breakdown, and KPI cards
-- **AI Insights** — Groq (Llama 3) generates a natural language interpretation of the portfolio's risk and performance
+- **AI Insights** — Groq (Llama 3.3 70B) generates a natural language interpretation of the portfolio's risk and performance
+- **JPA persistence** — portfolio stored in H2 via Spring Data JPA (`@Entity`, `JpaRepository`)
+- **Scheduled price refresh** — `@Scheduled` auto-refresh with configurable interval
+- **REST API** — Spring Boot backend with DTO-based request/response design and centralized exception handling
 - **CSV export** of full portfolio + risk report
-- **REST API** — Spring Boot backend exposes clean JSON endpoints
 
 ---
 
@@ -22,6 +24,7 @@ A full-stack financial analytics application built with **Java** and **Spring Bo
 | Layer | Technology |
 |---|---|
 | Backend | Java 17, Spring Boot 3, REST API |
+| Persistence | Spring Data JPA, H2 |
 | Frontend | HTML, CSS, JavaScript (vanilla) |
 | Market Data | Alpha Vantage API |
 | AI Analysis | Groq API (Llama 3.3 70B) |
@@ -35,12 +38,14 @@ A full-stack financial analytics application built with **Java** and **Spring Bo
 ```
 Browser (index.html)
       ↕ fetch() / JSON
-Spring Boot REST API (localhost:8080)
-  ├── PortfolioController   → /api/portfolio, /api/summary, /api/risk, /api/insights, /api/refresh
-  ├── PortfolioService      → portfolio state, price refresh, P&L
-  ├── RiskAnalyzer          → Sharpe Ratio, Beta, Volatility, Moving Average
-  ├── AlphaVantageClient    → live prices + 30-day history (with fallback)
-  └── GroqClient            → Llama 3 natural language insights
+Spring Boot REST API (:8080)
+  ├── PortfolioController      → /api/portfolio, /api/summary, /api/risk, /api/insights, /api/refresh
+  ├── PortfolioService         → business logic, @Scheduled price refresh, P&L
+  ├── StockRepository          → JpaRepository, H2 persistence
+  ├── RiskAnalyzer             → Sharpe Ratio, Beta, Volatility, Moving Average
+  ├── AlphaVantageClient       → live prices + 30-day history (with fallback)
+  ├── GroqClient               → Llama 3.3 70B natural language insights
+  └── GlobalExceptionHandler   → @ControllerAdvice centralized error handling
 ```
 
 ---
@@ -63,6 +68,8 @@ server.port=8080
 spring.application.name=stock-portfolio-tracker
 alphavantage.apikey=YOUR_ALPHA_VANTAGE_KEY
 groq.apikey=YOUR_GROQ_KEY
+spring.datasource.url=jdbc:h2:mem:portfoliodb
+spring.jpa.hibernate.ddl-auto=create-drop
 ```
 
 - Alpha Vantage free key: [alphavantage.co](https://www.alphavantage.co/support/#api-key)
